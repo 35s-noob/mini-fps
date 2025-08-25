@@ -128,9 +128,9 @@ function initGame(roomId,isHost){
   const moveDir=new THREE.Vector3();
   let recoilVel=0;
   function shootWeapon(){ 
-    if(selectedWeapon==='Assault Rifle') recoilVel=0.2;
-    else if(selectedWeapon==='Pistol') recoilVel=0.5;
-    else if(selectedWeapon==='Sniper Rifle') recoilVel=0.8;
+    if(selectedWeapon==='Assault Rifle') recoilVel-=0.2;
+    else if(selectedWeapon==='Pistol') recoilVel-=0.5;
+    else if(selectedWeapon==='Sniper Rifle') recoilVel-=0.8;
   }
   document.addEventListener('mousedown',e=>{ if(e.button===0) shootWeapon(); });
   gameCanvas.addEventListener('click',()=>gameCanvas.requestPointerLock());
@@ -200,3 +200,4 @@ function initGame(roomId,isHost){
 </script>
 </body>
 </html>
+
