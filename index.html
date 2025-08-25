@@ -111,43 +111,36 @@ function initGame(roomId,isHost){
 
   const world=createWorld(); scene.add(world.mesh);
 
-  // ===== Playerクラス =====
+  // ===== プレイヤークラス =====
   class Player{
-    constructor(pos,color=0xED1C24){
-      this.pos = pos.clone();
-      this.vel = new THREE.Vector3();
-      this.onGround = false;
-      const geo = new THREE.BoxGeometry(1,2,1);
-      const mat = new THREE.MeshLambertMaterial({ color: color });
-      this.mesh = new THREE.Mesh(geo,mat);
+    constructor(pos,color){
+      this.pos=pos.clone();
+      this.vel=new THREE.Vector3();
+      this.onGround=false;
+      const geo=new THREE.BoxGeometry(1,2,1);
+      const mat=new THREE.MeshLambertMaterial({ color: color });
+      this.mesh=new THREE.Mesh(geo,mat);
+      this.mesh.position.copy(this.pos);
       scene.add(this.mesh);
     }
+    updateMesh(){ this.mesh.position.copy(this.pos); }
   }
 
-  const player = new Player(new THREE.Vector3(8,16,8),0xED1C24);
+  // 自分プレイヤー
+  const player=new Player(new THREE.Vector3(8,16,8),0xED1C24);
 
-  // ===== 他プレイヤー管理 =====
-  const otherPlayers={};
-  function addOrUpdateOtherPlayer(id,pos){
-    if(!otherPlayers[id]){
-      otherPlayers[id]=new Player(pos,0x0000ff);
-    }
-    otherPlayers[id].pos.copy(pos);
-    otherPlayers[id].mesh.position.set(pos.x,pos.y-1,pos.z);
-  }
+  // 他プレイヤー（例として2人追加）
+  const otherPlayers=[];
+  otherPlayers.push(new Player(new THREE.Vector3(12,16,8),0x0000ff));
+  otherPlayers.push(new Player(new THREE.Vector3(8,16,12),0x0000ff));
 
-  // 仮にテスト用で他プレイヤーをランダムに動かす
-  let testOtherId='other1';
-  addOrUpdateOtherPlayer(testOtherId,new THREE.Vector3(5,16,5));
-
-  // 入力管理
+  // 入力
   const keyState={};
-  window.addEventListener('keydown', e=>keyState[e.code]=true);
-  window.addEventListener('keyup', e=>keyState[e.code]=false);
+  window.addEventListener('keydown',e=>keyState[e.code]=true);
+  window.addEventListener('keyup',e=>keyState[e.code]=false);
 
   let yaw=0,pitch=0,locked=false;
   const euler=new THREE.Euler(0,0,0,'YXZ');
-  const moveDir=new THREE.Vector3();
   let recoilVel=0;
 
   function shootWeapon(){ 
@@ -155,15 +148,15 @@ function initGame(roomId,isHost){
     else if(selectedWeapon==='Pistol') recoilVel=0.5;
     else if(selectedWeapon==='Sniper Rifle') recoilVel=0.8;
   }
-  document.addEventListener('mousedown', e=>{ if(e.button===0) shootWeapon(); });
-  gameCanvas.addEventListener('click', ()=>gameCanvas.requestPointerLock());
-  document.addEventListener('pointerlockchange', ()=>{ locked=(document.pointerLockElement===gameCanvas); });
-  document.addEventListener('mousemove', e=>{
+  document.addEventListener('mousedown',e=>{ if(e.button===0) shootWeapon(); });
+  gameCanvas.addEventListener('click',()=>gameCanvas.requestPointerLock());
+  document.addEventListener('pointerlockchange',()=>{ locked=(document.pointerLockElement===gameCanvas); });
+  document.addEventListener('mousemove',e=>{
     if(!locked) return;
     const sens=0.0025;
     yaw -= e.movementX*sens;
     pitch -= e.movementY*sens;
-    pitch=Math.max(-Math.PI/2+0.01, Math.min(Math.PI/2-0.01, pitch));
+    pitch=Math.max(-Math.PI/2+0.01,Math.min(Math.PI/2-0.01,pitch));
   });
 
   function collide(pos){
@@ -173,8 +166,8 @@ function initGame(roomId,isHost){
   }
 
   function update(dt){
-    // 自分プレイヤー移動
-    moveDir.set(0,0,0);
+    // 移動
+    const moveDir=new THREE.Vector3();
     if(keyState['KeyW']) moveDir.z+=1;
     if(keyState['KeyS']) moveDir.z-=1;
     if(keyState['KeyA']) moveDir.x-=1;
@@ -184,14 +177,14 @@ function initGame(roomId,isHost){
     const forward=new THREE.Vector3(0,0,-1).applyEuler(euler);
     const right=new THREE.Vector3(1,0,0).applyEuler(euler);
     forward.y=0; right.y=0; forward.normalize(); right.normalize();
-
     const speed=keyState['ShiftLeft']?12:6;
     const accel=new THREE.Vector3().addScaledVector(forward,moveDir.z*speed).addScaledVector(right,moveDir.x*speed);
+
     player.vel.x=THREE.MathUtils.damp(player.vel.x,accel.x,15,dt);
     player.vel.z=THREE.MathUtils.damp(player.vel.z,accel.z,15,dt);
 
     const g=-24; player.vel.y+=g*dt;
-    if(keyState['Space']&&player.onGround){ player.vel.y=10; player.onGround=false; }
+    if(keyState['Space'] && player.onGround){ player.vel.y=10; player.onGround=false; }
 
     const next=player.pos.clone();
     next.x+=player.vel.x*dt; if(collide(next)){ next.x=Math.round(next.x)+(player.vel.x>0?-0.51:0.51); player.vel.x=0; }
@@ -203,16 +196,22 @@ function initGame(roomId,isHost){
     } else player.onGround=false;
 
     player.pos.copy(next);
-    player.mesh.position.set(player.pos.x, player.pos.y-1, player.pos.z);
+    player.updateMesh();
+
+    // カメラ追従
+    camera.position.copy(player.pos).add(new THREE.Vector3(0,1.6,0));
+    const lookDir=new THREE.Vector3(0,0,-1).applyEuler(euler);
+    camera.lookAt(player.pos.clone().add(new THREE.Vector3(0,1.6,0)).add(lookDir));
+
+    // 他プレイヤー更新（仮に動かす例）
+    otherPlayers.forEach(p=>{
+      p.updateMesh();
+    });
 
     // 反動
     pitch-=recoilVel;
     recoilVel=THREE.MathUtils.damp(recoilVel,0,10,dt);
     euler.set(pitch,yaw,0,'YXZ');
-
-    // テスト: 他プレイヤーを簡単に動かす
-    const t=Math.sin(performance.now()/1000);
-    addOrUpdateOtherPlayer(testOtherId,new THREE.Vector3(5+t*2,16,5+t*2));
   }
 
   let lastTime=performance.now();
