@@ -112,12 +112,10 @@ function initGame(roomId,isHost){
   const world=createWorld(); scene.add(world.mesh);
 
   // 自分プレイヤー（赤立方体）
-  const playerMesh=new THREE.Mesh(
-    new THREE.BoxGeometry(1,2,1),
-    new THREE.MeshLambertMaterial({color:0xED1C24})
-  );
+   // プレイヤー
+  const playerMesh=new THREE.Mesh(new THREE.BoxGeometry(1,2,1), new THREE.MeshLambertMaterial({color:0xED1C24}));
   scene.add(playerMesh);
-
+  
   const key={};
   window.addEventListener('keydown',e=>key[e.code]=true);
   window.addEventListener('keyup',e=>key[e.code]=false);
@@ -200,4 +198,5 @@ function initGame(roomId,isHost){
 </script>
 </body>
 </html>
+
 
