@@ -139,32 +139,6 @@ function initGame(roomId,isHost){
   window.addEventListener('keydown',e=>keyState[e.code]=true);
   window.addEventListener('keyup',e=>keyState[e.code]=false);
 
-  let yaw=0,pitch=0,locked=false;
-  const euler=new THREE.Euler(0,0,0,'YXZ');
-  let recoilVel=0;
-
-  function shootWeapon(){ 
-    if(selectedWeapon==='Assault Rifle') recoilVel=0.2;
-    else if(selectedWeapon==='Pistol') recoilVel=0.5;
-    else if(selectedWeapon==='Sniper Rifle') recoilVel=0.8;
-  }
-  document.addEventListener('mousedown',e=>{ if(e.button===0) shootWeapon(); });
-  gameCanvas.addEventListener('click',()=>gameCanvas.requestPointerLock());
-  document.addEventListener('pointerlockchange',()=>{ locked=(document.pointerLockElement===gameCanvas); });
-  document.addEventListener('mousemove',e=>{
-    if(!locked) return;
-    const sens=0.0025;
-    yaw -= e.movementX*sens;
-    pitch -= e.movementY*sens;
-    pitch=Math.max(-Math.PI/2+0.01,Math.min(Math.PI/2-0.01,pitch));
-  });
-
-  function collide(pos){
-    const px=Math.floor(pos.x+0.5),py=Math.floor(pos.y),pz=Math.floor(pos.z+0.5);
-    for(let y=py;y<=py+1;y++){ if(world.collider.solid.has(`${px},${y},${pz}`)) return true; }
-    return false;
-  }
-
   function update(dt){
     // 移動
     const moveDir=new THREE.Vector3();
@@ -208,12 +182,6 @@ function initGame(roomId,isHost){
       p.updateMesh();
     });
 
-    // 反動
-    pitch-=recoilVel;
-    recoilVel=THREE.MathUtils.damp(recoilVel,0,10,dt);
-    euler.set(pitch,yaw,0,'YXZ');
-  }
-
   let lastTime=performance.now();
   function animate(){
     const now=performance.now();
@@ -227,3 +195,4 @@ function initGame(roomId,isHost){
 </script>
 </body>
 </html>
+
