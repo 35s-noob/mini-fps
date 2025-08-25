@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>Voxel FPS Multiplayer</title>
+<style>
+body { margin:0; overflow:hidden; background:#222; color:white; font-family:sans-serif; }
+#homeScreen { position:absolute; top:0; left:0; width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; background:#222; z-index:10; }
+#roomIdDisplay { position:absolute; top:10px; left:10px; color:white; font-weight:bold; z-index:10; }
+#playerNameContainer { position:absolute; top:10px; right:10px; z-index:10; color:white; }
+#inventory { position:absolute; bottom:20px; right:20px; display:flex; gap:5px; z-index:10; }
+.slot { width:80px; height:60px; background:rgba(0,0,0,0.6); color:white; display:flex; align-items:center; justify-content:center; border:2px solid white; font-size:12px; user-select:none; }
+.selected { border-color:yellow; }
+#crosshair { position:absolute; top:50%; left:50%; width:10px; height:10px; margin-left:-5px; margin-top:-5px; background:red; z-index:10; }
+canvas#gameCanvas { position:absolute; top:0; left:0; width:100%; height:100%; display:block; z-index:1; }
+</style>
+</head>
+<body>
+
+<div id="homeScreen">
+  <h1>Voxel FPS</h1>
+  <button id="createRoom">部屋を作る</button>
+  <div style="margin-top:20px;">
+    <input type="text" id="roomIdInput" placeholder="部屋ID">
+    <button id="joinRoom">参加する</button>
+  </div>
+</div>
+
+<div id="roomIdDisplay"></div>
+
+<div id="playerNameContainer">
+  <label for="playerNameInput">名前:</label>
+  <input type="text" id="playerNameInput" placeholder="Player">
+</div>
+
+<div id="inventory">
+  <div class="slot selected" data-weapon="Assault Rifle">Assault Rifle</div>
+  <div class="slot" data-weapon="Pistol">Pistol</div>
+  <div class="slot" data-weapon="Sniper Rifle">Sniper Rifle</div>
+</div>
+
+<div id="crosshair"></div>
+<canvas id="gameCanvas"></canvas>
+
+<script type="module">
+import * as THREE from 'three';
+
+// ======= ワールド生成 =======
+function createWorld(){
+  const sizeX=64,sizeZ=64,heightBase=4;
+  const boxes=[];
+  for(let x=0;x<sizeX;x++){
+    for(let z=0;z<sizeZ;z++){
+      const hill=Math.floor(2*Math.sin(x*0.3)+2*Math.cos(z*0.25));
+      const h=Math.max(1,heightBase+hill);
+      for(let y=0;y<h;y++) boxes.push({x,y,z});
+    }
+  }
+  const geo=new THREE.BoxGeometry(1,1,1);
+  const mat=new THREE.MeshLambertMaterial({color:0x55aa55});
+  const mesh=new THREE.InstancedMesh(geo,mat,boxes.length);
+  const m=new THREE.Matrix4();
+  boxes.forEach((b,i)=>{ m.makeTranslation(b.x,b.y,b.z); mesh.setMatrixAt(i,m); });
+  mesh.instanceMatrix.needsUpdate=true;
+  const solid=new Set(boxes.map(b=>`${b.x},${b.y},${b.z}`));
+  return {mesh,collider:{solid}};
+}
+
+// ======= HTML要素 =======
+const homeScreen=document.getElementById('homeScreen');
+const gameCanvas=document.getElementById('gameCanvas');
+const createRoomBtn=document.getElementById('createRoom');
+const joinRoomBtn=document.getElementById('joinRoom');
+const roomIdInput=document.getElementById('roomIdInput');
+const roomIdDisplay=document.getElementById('roomIdDisplay');
+const playerNameInput=document.getElementById('playerNameInput');
+let roomId;
+let playerName='Player';
+playerNameInput.addEventListener('input',e=>playerName=e.target.value||'Player');
+
+// ======= インベントリ =======
+let inventory=['Assault Rifle','Pistol','Sniper Rifle'];
+let selectedIndex=0;
+let selectedWeapon=inventory[selectedIndex];
+const slots=document.querySelectorAll('.slot');
+function updateInventoryUI(){ slots.forEach((s,i)=>s.classList.toggle('selected',i===selectedIndex)); }
+slots.forEach((s,i)=>s.addEventListener('click',()=>{ selectedIndex=i; selectedWeapon=inventory[i]; updateInventoryUI(); }));
+window.addEventListener('wheel',e=>{ selectedIndex=(e.deltaY<0)?(selectedIndex-1+inventory.length)%inventory.length:(selectedIndex+1)%inventory.length; selectedWeapon=inventory[selectedIndex]; updateInventoryUI(); });
+window.addEventListener('keydown',e=>{ if(e.code==='Digit1') selectedIndex=0; else if(e.code==='Digit2') selectedIndex=1; else if(e.code==='Digit3') selectedIndex=2; else return; selectedWeapon=inventory[selectedIndex]; updateInventoryUI(); });
+
+// ======= ホーム画面操作 =======
+function startGame(id,isHost){
+  homeScreen.style.display='none';
+  gameCanvas.style.display='block';
+  roomIdDisplay.textContent='Room: '+id;
+  initGame(id,isHost);
+}
+createRoomBtn.addEventListener('click',()=>{ roomId=Math.random().toString(36).substr(2,6); startGame(roomId,true); });
+joinRoomBtn.addEventListener('click',()=>{ roomId=roomIdInput.value.trim(); if(roomId) startGame(roomId,false); });
+
+// ======= ゲーム初期化 =======
+function initGame(roomId,isHost){
+  const scene=new THREE.Scene();
+  scene.background=new THREE.Color(0x87ceeb);
+  const camera=new THREE.PerspectiveCamera(75,window.innerWidth/window.innerHeight,0.1,1000);
+  const renderer=new THREE.WebGLRenderer({canvas:gameCanvas});
+  renderer.setSize(window.innerWidth,window.innerHeight);
+
+  // 光源
+  const hemi=new THREE.HemisphereLight(0xffffff,0x444444,1.0); hemi.position.set(0,200,0); scene.add(hemi);
+  const dir=new THREE.DirectionalLight(0xffffff,0.8); dir.position.set(100,200,100); scene.add(dir);
+
+  // ワールド
+  const world=createWorld(); scene.add(world.mesh);
+
+  // 自分プレイヤー
+  const playerMesh=new THREE.Mesh(new THREE.BoxGeometry(1,2,1), new THREE.MeshLambertMaterial({color:0xED1C24}));
+  scene.add(playerMesh);
+
+  // 他プレイヤー管理
+  const otherPlayers={};
+  function updateOtherPlayer(id,pos){
+    if(!otherPlayers[id]){
+      const mesh=new THREE.Mesh(new THREE.BoxGeometry(1,2,1), new THREE.MeshLambertMaterial({color:0x0000ff}));
+      scene.add(mesh);
+      otherPlayers[id]=mesh;
+    }
+    otherPlayers[id].position.copy(pos);
+  }
+
+  // 入力
+  const key={};
+  window.addEventListener('keydown',e=>key[e.code]=true);
+  window.addEventListener('keyup',e=>key[e.code]=false);
+
+  let yaw=0,pitch=0,locked=false,onGround=false;
+  const euler=new THREE.Euler(0,0,0,'YXZ');
+  const velocity=new THREE.Vector3();
+  const moveDir=new THREE.Vector3();
+  let recoilVel=0;
+  function shootWeapon(){ 
+    if(selectedWeapon==='Assault Rifle') recoilVel=0.2;
+    else if(selectedWeapon==='Pistol') recoilVel=0.5;
+    else if(selectedWeapon==='Sniper Rifle') recoilVel=0.8;
+  }
+  document.addEventListener('mousedown',e=>{ if(e.button===0) shootWeapon(); });
+
+  gameCanvas.addEventListener('click',()=>gameCanvas.requestPointerLock());
+  document.addEventListener('pointerlockchange',()=>{ locked=(document.pointerLockElement===gameCanvas); });
+  document.addEventListener('mousemove',e=>{
+    if(!locked) return;
+    const sens=0.0025;
+    yaw -= e.movementX*sens;
+    pitch -= e.movementY*sens;
+    pitch=Math.max(-Math.PI/2+0.01,Math.min(Math.PI/2-0.01,pitch));
+  });
+
+  camera.position.set(8,16,8);
+
+  function collide(pos){
+    const px=Math.floor(pos.x+0.5),py=Math.floor(pos.y),pz=Math.floor(pos.z+0.5);
+    for(let y=py;y<=py+1;y++){ if(world.collider.solid.has(`${px},${y},${pz}`)) return true; }
+    return false;
+  }
+
+  // ======= WebRTC P2P同期 (簡易) =======
+  const peers={};
+  const localId=Math.random().toString(36).substr(2,6);
+  // シグナリングサーバーは簡易的にここでは省略、WebSocket等でlocalId<->offer/answer交換
+  // 送信時: send({id:localId,pos:camera.position})
+  // 受信時: updateOtherPlayer(peerId,new THREE.Vector3(...))
+
+  function update(dt){
+    // 移動
+    moveDir.set(0,0,0);
+    if(key['KeyW']) moveDir.z+=1;
+    if(key['KeyS']) moveDir.z-=1;
+    if(key['KeyA']) moveDir.x-=1;
+    if(key['KeyD']) moveDir.x+=1;
+    moveDir.normalize();
+    const forward=new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
+    const right=new THREE.Vector3(1,0,0).applyQuaternion(camera.quaternion);
+    forward.y=0; right.y=0; forward.normalize(); right.normalize();
+    const speed=key['ShiftLeft']?12:6;
+    const accel=new THREE.Vector3().addScaledVector(forward,moveDir.z*speed).addScaledVector(right,moveDir.x*speed);
+    velocity.x=THREE.MathUtils.damp(velocity.x,accel.x,15,dt);
+    velocity.z=THREE.MathUtils.damp(velocity.z,accel.z,15,dt);
+    const g=-24; velocity.y+=g*dt;
+    if(key['Space']&&onGround){ velocity.y=10; onGround=false; }
+
+    const next=camera.position.clone();
+    next.x+=velocity.x*dt; if(collide(next)){ next.x=Math.round(next.x)+(velocity.x>0?-0.51:0.51); velocity.x=0; }
+    next.z+=velocity.z*dt; if(collide(next)){ next.z=Math.round(next.z)+(velocity.z>0?-0.51:0.51); velocity.z=0; }
+    next.y+=velocity.y*dt;
+    if(collide(next)){
+      if(velocity.y<0){ onGround=true; velocity.y=0; next.y=Math.floor(next.y)+1.0; }
+      else if(velocity.y>0){ velocity.y=0; next.y=Math.ceil(next.y)-0.01; }
+    } else onGround=false;
+    camera.position.copy(next);
+    playerMesh.position.set(camera.position.x, camera.position.y-1, camera.position.z);
+
+    // 反動
+    pitch-=recoilVel;
+    recoilVel=THREE.MathUtils.damp(recoilVel,0,10,dt);
+    euler.set(pitch,yaw,0,'YXZ');
+    camera.quaternion.setFromEuler(euler);
+
+    // 他プレイヤー更新例（仮:ランダム）
+    // 実運用ではWebRTCデータチャンネルから座標受信して updateOtherPlayer(peerId,pos)
+  }
+
+  let lastTime=performance.now();
+  function animate(){
+    const now=performance.now();
+    const dt=(now-lastTime)/1000; lastTime=now;
+    update(dt);
+    renderer.render(scene,camera);
+    requestAnimationFrame(animate);
+  }
+  animate();
+}
+</script>
+</body>
+</html>
