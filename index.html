@@ -123,7 +123,7 @@ function initGame(roomId,isHost){
     scene.add(this.mesh);
   }
     
-  const key={};
+  const keyState={};
   window.addEventListener('keydown',e=>key[e.code]=true);
   window.addEventListener('keyup',e=>key[e.code]=false);
 
@@ -159,20 +159,20 @@ function initGame(roomId,isHost){
   function update(dt){
     // 移動
     moveDir.set(0,0,0);
-    if(key['KeyW']) moveDir.z+=1;
-    if(key['KeyS']) moveDir.z-=1;
-    if(key['KeyA']) moveDir.x-=1;
-    if(key['KeyD']) moveDir.x+=1;
+    if(keyState['KeyW']) moveDir.z+=1;
+    if(keyState['KeyS']) moveDir.z-=1;
+    if(keyState['KeyA']) moveDir.x-=1;
+    if(keyState['KeyD']) moveDir.x+=1;
     moveDir.normalize();
     const forward=new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
     const right=new THREE.Vector3(1,0,0).applyQuaternion(camera.quaternion);
     forward.y=0; right.y=0; forward.normalize(); right.normalize();
-    const speed=key['ShiftLeft']?12:6;
+    const speed=keyState['ShiftLeft']?12:6;
     const accel=new THREE.Vector3().addScaledVector(forward,moveDir.z*speed).addScaledVector(right,moveDir.x*speed);
     velocity.x=THREE.MathUtils.damp(velocity.x,accel.x,15,dt);
     velocity.z=THREE.MathUtils.damp(velocity.z,accel.z,15,dt);
     const g=-24; velocity.y+=g*dt;
-    if(key['Space']&&onGround){ velocity.y=10; onGround=false; }
+    if(keyState['Space']&&onGround){ velocity.y=10; onGround=false; }
 
     const next=camera.position.clone();
     next.x+=velocity.x*dt; if(collide(next)){ next.x=Math.round(next.x)+(velocity.x>0?-0.51:0.51); velocity.x=0; }
@@ -205,6 +205,7 @@ function initGame(roomId,isHost){
 </script>
 </body>
 </html>
+
 
 
 
