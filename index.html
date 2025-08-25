@@ -113,18 +113,32 @@ function initGame(roomId,isHost){
 
   // ===== Playerクラス =====
   class Player{
-    constructor(pos){
+    constructor(pos,color=0xED1C24){
       this.pos = pos.clone();
       this.vel = new THREE.Vector3();
       this.onGround = false;
       const geo = new THREE.BoxGeometry(1,2,1);
-      const mat = new THREE.MeshLambertMaterial({ color:0xED1C24 });
+      const mat = new THREE.MeshLambertMaterial({ color: color });
       this.mesh = new THREE.Mesh(geo,mat);
       scene.add(this.mesh);
     }
   }
 
-  const player = new Player(new THREE.Vector3(8,16,8));
+  const player = new Player(new THREE.Vector3(8,16,8),0xED1C24);
+
+  // ===== 他プレイヤー管理 =====
+  const otherPlayers={};
+  function addOrUpdateOtherPlayer(id,pos){
+    if(!otherPlayers[id]){
+      otherPlayers[id]=new Player(pos,0x0000ff);
+    }
+    otherPlayers[id].pos.copy(pos);
+    otherPlayers[id].mesh.position.set(pos.x,pos.y-1,pos.z);
+  }
+
+  // 仮にテスト用で他プレイヤーをランダムに動かす
+  let testOtherId='other1';
+  addOrUpdateOtherPlayer(testOtherId,new THREE.Vector3(5,16,5));
 
   // 入力管理
   const keyState={};
@@ -159,6 +173,7 @@ function initGame(roomId,isHost){
   }
 
   function update(dt){
+    // 自分プレイヤー移動
     moveDir.set(0,0,0);
     if(keyState['KeyW']) moveDir.z+=1;
     if(keyState['KeyS']) moveDir.z-=1;
@@ -190,9 +205,14 @@ function initGame(roomId,isHost){
     player.pos.copy(next);
     player.mesh.position.set(player.pos.x, player.pos.y-1, player.pos.z);
 
+    // 反動
     pitch-=recoilVel;
     recoilVel=THREE.MathUtils.damp(recoilVel,0,10,dt);
     euler.set(pitch,yaw,0,'YXZ');
+
+    // テスト: 他プレイヤーを簡単に動かす
+    const t=Math.sin(performance.now()/1000);
+    addOrUpdateOtherPlayer(testOtherId,new THREE.Vector3(5+t*2,16,5+t*2));
   }
 
   let lastTime=performance.now();
