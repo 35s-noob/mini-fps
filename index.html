@@ -111,44 +111,46 @@ function initGame(roomId,isHost){
 
   const world=createWorld(); scene.add(world.mesh);
 
+  // ===== Playerクラス =====
   class Player{
-  constructor(pos){
-    this.pos = pos.clone();
-    this.vel = new THREE.Vector3();
-    this.onGround = false;
-
-    const geo = new THREE.BoxGeometry(1,2,1);
-    const mat = new THREE.MeshBasicMaterial({ color:0x00ff00 });
-    this.mesh = new THREE.Mesh(geo,mat);
-    scene.add(this.mesh);
+    constructor(pos){
+      this.pos = pos.clone();
+      this.vel = new THREE.Vector3();
+      this.onGround = false;
+      const geo = new THREE.BoxGeometry(1,2,1);
+      const mat = new THREE.MeshLambertMaterial({ color:0xED1C24 });
+      this.mesh = new THREE.Mesh(geo,mat);
+      scene.add(this.mesh);
+    }
   }
-    
-  const keyState={};
-  window.addEventListener('keydown',e=>key[e.code]=true);
-  window.addEventListener('keyup',e=>key[e.code]=false);
 
-  let yaw=0,pitch=0,locked=false,onGround=false;
+  const player = new Player(new THREE.Vector3(8,16,8));
+
+  // 入力管理
+  const keyState={};
+  window.addEventListener('keydown', e=>keyState[e.code]=true);
+  window.addEventListener('keyup', e=>keyState[e.code]=false);
+
+  let yaw=0,pitch=0,locked=false;
   const euler=new THREE.Euler(0,0,0,'YXZ');
-  const velocity=new THREE.Vector3();
   const moveDir=new THREE.Vector3();
   let recoilVel=0;
+
   function shootWeapon(){ 
-    if(selectedWeapon==='Assault Rifle') recoilVel-=0.2;
-    else if(selectedWeapon==='Pistol') recoilVel-=0.5;
-    else if(selectedWeapon==='Sniper Rifle') recoilVel-=0.8;
+    if(selectedWeapon==='Assault Rifle') recoilVel=0.2;
+    else if(selectedWeapon==='Pistol') recoilVel=0.5;
+    else if(selectedWeapon==='Sniper Rifle') recoilVel=0.8;
   }
-  document.addEventListener('mousedown',e=>{ if(e.button===0) shootWeapon(); });
-  gameCanvas.addEventListener('click',()=>gameCanvas.requestPointerLock());
-  document.addEventListener('pointerlockchange',()=>{ locked=(document.pointerLockElement===gameCanvas); });
-  document.addEventListener('mousemove',e=>{
+  document.addEventListener('mousedown', e=>{ if(e.button===0) shootWeapon(); });
+  gameCanvas.addEventListener('click', ()=>gameCanvas.requestPointerLock());
+  document.addEventListener('pointerlockchange', ()=>{ locked=(document.pointerLockElement===gameCanvas); });
+  document.addEventListener('mousemove', e=>{
     if(!locked) return;
     const sens=0.0025;
     yaw -= e.movementX*sens;
     pitch -= e.movementY*sens;
-    pitch=Math.max(-Math.PI/2+0.01,Math.min(Math.PI/2-0.01,pitch));
+    pitch=Math.max(-Math.PI/2+0.01, Math.min(Math.PI/2-0.01, pitch));
   });
-
-  camera.position.set(8,16,8);
 
   function collide(pos){
     const px=Math.floor(pos.x+0.5),py=Math.floor(pos.y),pz=Math.floor(pos.z+0.5);
@@ -157,39 +159,40 @@ function initGame(roomId,isHost){
   }
 
   function update(dt){
-    // 移動
     moveDir.set(0,0,0);
     if(keyState['KeyW']) moveDir.z+=1;
     if(keyState['KeyS']) moveDir.z-=1;
     if(keyState['KeyA']) moveDir.x-=1;
     if(keyState['KeyD']) moveDir.x+=1;
     moveDir.normalize();
-    const forward=new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
-    const right=new THREE.Vector3(1,0,0).applyQuaternion(camera.quaternion);
+
+    const forward=new THREE.Vector3(0,0,-1).applyEuler(euler);
+    const right=new THREE.Vector3(1,0,0).applyEuler(euler);
     forward.y=0; right.y=0; forward.normalize(); right.normalize();
+
     const speed=keyState['ShiftLeft']?12:6;
     const accel=new THREE.Vector3().addScaledVector(forward,moveDir.z*speed).addScaledVector(right,moveDir.x*speed);
-    velocity.x=THREE.MathUtils.damp(velocity.x,accel.x,15,dt);
-    velocity.z=THREE.MathUtils.damp(velocity.z,accel.z,15,dt);
-    const g=-24; velocity.y+=g*dt;
-    if(keyState['Space']&&onGround){ velocity.y=10; onGround=false; }
+    player.vel.x=THREE.MathUtils.damp(player.vel.x,accel.x,15,dt);
+    player.vel.z=THREE.MathUtils.damp(player.vel.z,accel.z,15,dt);
 
-    const next=camera.position.clone();
-    next.x+=velocity.x*dt; if(collide(next)){ next.x=Math.round(next.x)+(velocity.x>0?-0.51:0.51); velocity.x=0; }
-    next.z+=velocity.z*dt; if(collide(next)){ next.z=Math.round(next.z)+(velocity.z>0?-0.51:0.51); velocity.z=0; }
-    next.y+=velocity.y*dt;
+    const g=-24; player.vel.y+=g*dt;
+    if(keyState['Space']&&player.onGround){ player.vel.y=10; player.onGround=false; }
+
+    const next=player.pos.clone();
+    next.x+=player.vel.x*dt; if(collide(next)){ next.x=Math.round(next.x)+(player.vel.x>0?-0.51:0.51); player.vel.x=0; }
+    next.z+=player.vel.z*dt; if(collide(next)){ next.z=Math.round(next.z)+(player.vel.z>0?-0.51:0.51); player.vel.z=0; }
+    next.y+=player.vel.y*dt;
     if(collide(next)){
-      if(velocity.y<0){ onGround=true; velocity.y=0; next.y=Math.floor(next.y)+1.0; }
-      else if(velocity.y>0){ velocity.y=0; next.y=Math.ceil(next.y)-0.01; }
-    } else onGround=false;
-    camera.position.copy(next);
-    playerMesh.position.set(camera.position.x, camera.position.y-1, camera.position.z);
+      if(player.vel.y<0){ player.onGround=true; player.vel.y=0; next.y=Math.floor(next.y)+1.0; }
+      else if(player.vel.y>0){ player.vel.y=0; next.y=Math.ceil(next.y)-0.01; }
+    } else player.onGround=false;
 
-    // 反動
+    player.pos.copy(next);
+    player.mesh.position.set(player.pos.x, player.pos.y-1, player.pos.z);
+
     pitch-=recoilVel;
     recoilVel=THREE.MathUtils.damp(recoilVel,0,10,dt);
     euler.set(pitch,yaw,0,'YXZ');
-    camera.quaternion.setFromEuler(euler);
   }
 
   let lastTime=performance.now();
@@ -205,7 +208,3 @@ function initGame(roomId,isHost){
 </script>
 </body>
 </html>
-
-
-
-
